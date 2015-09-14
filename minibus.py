@@ -176,10 +176,9 @@ data_header = {
 }
 
 busschema = {
-    "title": "MiniBus Schema",
+    "title": "MiniBus Schema 0.3.0",
     "type": "object",
     "properties": {
-        "version": "3.0.0",
         "header": data_header,
         "data": {},
     },
@@ -194,7 +193,7 @@ class MiniBusClientCore(MiniBusClientAPI):
     def __init__(self, name, iface=None, cryptokey=None):
         MiniBusClientAPI.__init__(self, name, iface)
         self._iface = iface
-        self._clientname = name
+        self._clientname = name if name else str(uuid.uuid4())
         self._cryptokey = cryptokey
         if cryptokey:
             if not HAS_GNUPG:
@@ -206,9 +205,8 @@ class MiniBusClientCore(MiniBusClientAPI):
         self._topic_schemas = dict()  # topicname(regex): jsonschema(dict)
 
         # Services
-        self._local_services = dict()  # servicename(str): func
-        self._service_schemas = dict()  # servicename(str): (req_schema, reply_schema)
-        self._service_callbacks = dict()
+#         self._local_services = dict()  # servicename(str): func
+#         self._service_schemas = dict()  # servicename(str): (req_schema, reply_schema)
 
         # Make sure our schema is good
         jsonschema.Draft4Validator.check_schema(busschema)
@@ -270,6 +268,7 @@ class MiniBusClientCore(MiniBusClientAPI):
             packet = self._decrypt_packet(packet)
 
         topic = packet["header"]["topic"]
+        header = packet["header"]
         data = packet["data"]
         for pattern, callbacks in self._subscriptions.items():
             if pattern.match(topic):
@@ -314,7 +313,7 @@ class MiniBusClientCore(MiniBusClientAPI):
         self.send_packet(packet)
         logger.debug("Packet sent!")
 
-    def subscribe(self, name_pattern, data_format, callback):
+    def subscribe(self, name_pattern, data_format, callback, headers=False):
         """ Instructs client to listen to topic matching 'topic_name'.
             name_pattern (str): regex to match topic name against
             data_format (dict): jsonschema to validate incomming data types
@@ -338,7 +337,15 @@ class MiniBusClientCore(MiniBusClientAPI):
         if callback in self._subscriptions[pattern]:
             raise Exception("Callback %s already registered for subscription  %s"
                             % (str(callback), name_pattern))
-        self._subscriptions[pattern].append(callback)
+
+        # If we don't want to deal with header data, wrap the callback function
+        # before adding it to the subscriptions list
+        if headers:
+            self._subscriptions[pattern].append(callback)
+        else:
+            simple = lambda header, data, func=callback: callback(data) 
+            self._subscriptions[pattern].append(simple)
+
 
     def unsubscribe(self, name_pattern, callback):
         pattern = self._get_name_pattern(name_pattern)
@@ -361,50 +368,6 @@ class MiniBusClientCore(MiniBusClientAPI):
             self._topic_schemas[pattern] = data_format
         return lambda data: self._publish(topic_name, data)
 
-
-# Service calls are hard to make generic between the two models because there is inheriently
-# the problem that the service call could call yet another service (chaining) and hang because
-# it does not return right away.
-
-class TopicServiceHost(object):
-    def __init__(self, service):
-        self._reqst_topic = None
-        self._reply_topic = None
-        self._error_topic = None
-        self.reply_pub = self.publisher("/test/reply", {})
-        self.error_pub = self.publisher("/test/error", {})
-        self.subscribe("/test/reqst", {}, self.service_call)
-        self.service = service
-        self.service_host("/test", {}, {}, self.service)
-
-    def service(self, indata):
-        return sum(indata)
-
-    def service_call(self, header, data):
-        try:
-            # This call should really be threaded, but the symantics of that are complicated unless
-            # this callback is already happening in a thread
-            result = self.service(data)
-            self.reply_pub(result)
-        except Exception as e:
-            self.error_pub(e)
-        
-
-class TopicServiceClient(object):
-    def __init__(self):
-        self._reqst_topic = None
-        self._reply_topic = None
-        self._error_topic = None
-        self.pub = self.publisher("/test/reqst", { })
-        self.subscribe("/test/reply", { }, self.callback)
-        self.subscribe("/test/error", { }, self.callback)
-
-    def callback(self, header, data):
-        if header["topic"] == "/test/reply"
-
-    def call(self, data=None):
-        self.pub(data) # Does not have mechanism for setting transid like this
-                        # unelss that was moved to inside a service specific wrapper
 
 if HAS_TWISTED:
     class MiniBusTwistedClient(MiniBusClientCore):
