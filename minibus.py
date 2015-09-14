@@ -170,7 +170,8 @@ data_header = {
         "topic": {"type": "string"},
         "author": {"type": "string"},
         "gpg": {"type": "string"},
-        "idstr": {"type": "string"}
+        "idstr": {"type": "string"},
+        "version": {"enum": ["0.3.0"]}
     },
     "required": ["topic"]
 }
@@ -190,7 +191,7 @@ busschema = {
 class MiniBusClientCore(MiniBusClientAPI):
    #pylint: disable=no-self-use,no-member 
 
-    def __init__(self, name, iface=None, cryptokey=None):
+    def __init__(self, name=None, iface=None, cryptokey=None):
         MiniBusClientAPI.__init__(self, name, iface)
         self._iface = iface
         self._clientname = name if name else str(uuid.uuid4())
@@ -236,11 +237,10 @@ class MiniBusClientCore(MiniBusClientAPI):
             raise Exception("Received encrypted packet, but I don't have a key")
         gpgversion = packet["header"]["gpg"]
         gpgtext = packet["data"]
-        ciphertext = gpg.decrypt(packet["data"], self._cryptokey)
         # We are just sending the ciphertext and not the full message, so we need
         # to reconstructe it here before we can decrypt it
         ciphertext = "-----BEGIN PGP MESSAGE-----\nVersion: %s\n\n%s\n-----END PGP MESSAGE-----" % (gpgversion, gpgtext)
-        plaintext = gpg.decrypt(ciphertext, passphrase=self._cryptokey)
+        plaintext = self._gpg.decrypt(ciphertext, passphrase=self._cryptokey)
         packet["data"] = plaintext
         return packet
 
@@ -249,15 +249,21 @@ class MiniBusClientCore(MiniBusClientAPI):
         if not HAS_GNUPG:
             raise Exception("Attempting to encrypted packet, but I don't have gnupg")
         plaintext = packet["data"]
-        crypt = gpg.encrypt(plaintext, recipients=None, symmetric=True,
+        crypt = self._gpg.encrypt(plaintext, recipients=None, symmetric=True,
                             passphrase=self._cryptokey, armor=True)
         ciphertext = [x for x in crypt.data.split('\n') if len(x) > 0]
+        # Remove the first and last lines
         # First line is -----BEGIN PGP MESSAGE-----
-        # Second line is Version: GnuPG vX.X.X
         # Last line is -----END PGP MESSAGE-----
-        packet["header"]["gpg"] = ciphertext[1][9:].strip()  # Populate with version
-        ciphertext = "".join(crypt[2:-1])  # Combines all the lines into one long string of text
-        packet["data"] = ciphertext
+        ciphertext = ciphertext[1:-1]
+        # Second line is possibly Version: GnuPG vX.X.X
+        if ciphertext[0].strip().lower()[:7] == "version":
+            packet["header"]["gpg"] = ciphertext[0].strip()[9:]  # Populate with version
+            ciphertext = ciphertext[1:]
+        else:
+            packet["header"]["gpg"] = "v0"
+        # Combines all the lines into one long string of text
+        packet["data"] = "".join(ciphertext)
         return packet
 
     def recv_packet(self, datagram):
@@ -318,6 +324,8 @@ class MiniBusClientCore(MiniBusClientAPI):
             name_pattern (str): regex to match topic name against
             data_format (dict): jsonschema to validate incomming data types
             callback (func): function that will be called to receive the data
+            headers: When True, callback function should have signature func(headers, data),
+                     otherwise func(data)
         """
         pattern = self._get_name_pattern(name_pattern)
 
@@ -396,7 +404,7 @@ if HAS_TWISTED:
                 self.mbclient.recv_packet(datagram)
 
         def __init__(self, name=None, cryptokey=None):
-            MiniBusClientCore.__init__(self, name, cryptokey)
+            MiniBusClientCore.__init__(self, name=name, cryptokey=cryptokey)
             self.datagram_protocol = MiniBusTwistedClient.MBDatagramProtocol(self)
 
             # If there is a fini() defined, run it at shutdown
