@@ -1,0 +1,65 @@
+#!/usr/bin/env python
+"""
+mbtt - MiniBus Topic Tool
+"""
+import argparse
+from minibus import MiniBusTwistedClient
+import json
+import jsonschema
+import sys
+sys.DONT_WRITE_BYTECODE = True
+
+class TopicTool(MiniBusTwistedClient):
+    def __init__(self, args):
+        self.args = args
+        MiniBusTwistedClient.__init__(self, cryptokey=self.args.cryptokey)
+        self.pub = None
+        if self.args.cmd == "echo":
+            self.subscribe(self.args.topic, self.args.schema, self.print_callback, headers=True)
+        if self.args.cmd == "pub":
+            self.subscribe(self.args.topic, self.args.schema, self.pub_confirm_callback)
+            self.pub = self.publisher(self.args.topic, self.args.schema)
+
+    def print_callback(self, header, data):
+        if self.args.headers:
+            print header
+        print data
+
+    def pub_confirm_callback(self, data):
+        """ exits program after confirming that data was sent """
+        if str(data) == str(self.args.data):
+            self.exit_()
+
+    def run(self):
+        if self.pub:
+            try:
+                self.pub(self.args.data)
+            except jsonschema.exceptions.ValidationError as e:
+                print e
+                self.exit_()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("mbtt", description="MiniBus Topic Tool")
+    subparsers = parser.add_subparsers(dest="cmd")
+
+    parser_echo = subparsers.add_parser('echo', help="listen to topic")
+    parser_echo.add_argument("topic", type=str, help="topic pattern to listen to")
+    parser_echo.add_argument("--schema", type=str, default="", help="topic schema")
+    parser_echo.add_argument("--headers", action="store_true", help="Show topic headers")
+    parser_echo.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
+
+    parser_pub = subparsers.add_parser('pub', help="publish to topic")
+    parser_pub.add_argument("topic", type=str, help="topic pattern to listen to")
+    parser_pub.add_argument("data", type=str, help="data to send - must be json")
+    parser_pub.add_argument("--schema", type=str, default="", help="topic schema")
+    parser_pub.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
+
+    args = parser.parse_args()
+    if args.schema == "":
+        args.schema = dict()
+    else:
+        args.schema = json.loads(args.schema)
+
+    tt = TopicTool(args)
+    tt.exec_()
