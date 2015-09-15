@@ -206,6 +206,7 @@ class MiniBusClientCore(MiniBusClientAPI):
         self._topic_schemas = dict()  # topicname(regex): jsonschema(dict)
 
         # Services
+        self._service_server_requests = dict()  # requestid(str): "servicetopicsharedname/"
 #         self._local_services = dict()  # servicename(str): func
 #         self._service_schemas = dict()  # servicename(str): (req_schema, reply_schema)
 
@@ -293,7 +294,7 @@ class MiniBusClientCore(MiniBusClientAPI):
     def send_packet(self, datagram):
         raise NotImplementedError()
 
-    def _publish(self, name, data):
+    def _publish(self, name, idstr, data):
         """ Serialize data and publish on topic of given name.
         This function is wrapped in a lambda expression and returned by publisher()
         """
@@ -305,7 +306,7 @@ class MiniBusClientCore(MiniBusClientAPI):
                 jsonschema.validate(data, schema)
 
 #         packet = {"type": "data", "topic": name, "data": data}
-        packet = {"header": {"topic": name, "author": self._clientname}, "data": data}
+        packet = {"header": {"topic": name, "author": self._clientname, "idstr": idstr}, "data": data}
         jsonschema.validate(packet, busschema)
         # Encrypt if key specified
         if self._cryptokey:
@@ -374,7 +375,82 @@ class MiniBusClientCore(MiniBusClientAPI):
                 raise Exception("Conflicting schema already exists for %s" % topic_name)
         else:
             self._topic_schemas[pattern] = data_format
-        return lambda data: self._publish(topic_name, data)
+        return lambda data: self._publish(topic_name, str(uuid.uuid4()), data)
+
+    ########################
+    ## Services Functions ##
+    ########################
+
+    def _srv_namespacing(self, name):
+        """ Returns tuple of service topic names (request, reply, error)
+        Services share a common namespace <name> with three well known topic
+        names inside it. 
+        """
+        if not (isinstance(name, str) or isinstance(name, unicode)):
+            raise Exception("Service name must be a string, not '%s'" % str(type(name)))
+        # Add a / to the end if it doesn't already exist
+        name += "/" if not name[-1] == "/" else ""
+        return (name + "__request__", name + "__reply__", name + "__error__")
+
+    def service_func_server(self, name, reqst_schema, reply_schema, func):
+        def _srv_fun(reqstid, params, func):
+            retval = func(params)
+            self.service_server_return(reqstid, retval)
+
+        srv_fun = lambda reqstid, params, f=func: _srv_fun(reqstid, params, f)
+        self.service_server(name, reqst_schema, reply_schema, srv_fun)
+
+    def service_server(self, name, reqst_schema, reply_schema, func):
+        def _srv_cb(headers, reqst_data, func):
+            try:
+                # Save the work request with the topic you received it on by
+                # striping the "__request__" part off the topic string, saving the /
+                self._service_server_requests[headers["idstr"]] = headers["topic"][:-11]
+                func(headers["idstr"], reqst_data)
+            except Exception as e:
+                self.service_server_error(headers["idstr"], str(e))
+            else:
+                # TODO: test if work id still exists. If it does, set a timer
+                # to check on it again. If it still exists after the timer expires,
+                # do the service_server_error() at that point in time and remove it.
+                pass
+        # Get topic names
+        request_topic, reply_topic, error_topic = self._srv_namespacing(name)
+
+        # Create publishers for sending reply to service clients
+        # NOTE: Even if we don't ever use these again, it checks the schemas to
+        # make sure they are well formed and registers the schema to the topic
+        self.publisher(reply_topic, reply_schema)
+        self.publisher(error_topic, { })  # TODO: Create a service error schema
+
+        # Wrap the initial service function in a try/except, and subscribe it to
+        # the request topic to listen for incoming queries
+        srv_cb = lambda headers, reqst_data, f=func: _srv_cb(headers, reqst_data, f)
+        self.subscribe(request_topic, reqst_schema, srv_cb, headers=True)
+
+    def service_server_return(self, reqstid, value):
+        # Normally we should not directly use the _publish command because it makes
+        # assumptions that the topic being published on has been initialized by
+        # a call to self.publisher() first. But we do that and this feels cleaner
+        # then keeping track of extra publisher objects
+
+        # Remove the service request from the list and use it to generate the topic
+        # name we will reply on
+        reply_topic = self._srv_namespacing(self._service_server_requests.pop(reqstid))[1]
+        self._publish(reply_topic, reqstid, value)
+
+
+    def service_server_error(self, reqstid, value):
+        # Normally we should not directly use the _publish command because it makes
+        # assumptions that the topic being published on has been initialized by
+        # a call to self.publisher() first. But we do that and this feels cleaner
+        # then keeping track of extra publisher objects
+
+        # Remove the service request from the list and use it to generate the topic
+        # name we will reply on
+        error_topic = self._srv_namespacing(self._service_server_requests.pop(reqstid))[2]
+        self._publish(error_topic, reqstid, value)
+
 
 
 if HAS_TWISTED:
