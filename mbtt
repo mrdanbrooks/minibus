@@ -3,7 +3,7 @@
 mbtt - MiniBus Topic Tool
 """
 import argparse
-from minibus import MiniBusTwistedClient
+from minibus import MiniBusTwistedClient, MiniBusSocketClient
 import json
 import jsonschema
 import sys
@@ -39,8 +39,44 @@ class TopicTool(MiniBusTwistedClient):
                 self.exit_()
 
 
+class SocketTool(MiniBusSocketClient):
+    def __init__(self, args):
+        self.args = args
+        MiniBusSocketClient.__init__(self, cryptokey=self.args.cryptokey)
+        self.pub = None
+        if self.args.cmd == "echo":
+            self.subscribe(self.args.topic, self.args.schema, self.print_callback, headers=True)
+        if self.args.cmd == "pub":
+            self.subscribe(self.args.topic, self.args.schema, self.pub_confirm_callback)
+            self.pub = self.publisher(self.args.topic, self.args.schema)
+
+    def print_callback(self, header, data):
+        if self.args.headers:
+            print header
+        print data
+
+    def pub_confirm_callback(self, data):
+        """ exits program after confirming that data was sent """
+        if str(data) == str(self.args.data):
+            self.close()
+            exit(0)
+
+    def run(self):
+        if self.pub:
+            try:
+                self.pub(self.args.data)
+            except jsonschema.exceptions.ValidationError as e:
+                print e
+                self.close()
+                exit(0)
+        else:
+            self.spin()
+ 
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("mbtt", description="MiniBus Topic Tool")
+    parser.add_argument("--socket", action="store_true", help="uses socket interface instead of twisted")
     subparsers = parser.add_subparsers(dest="cmd")
 
     parser_echo = subparsers.add_parser('echo', help="listen to topic")
