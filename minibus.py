@@ -113,13 +113,6 @@ class MiniBusClientAPI(object):
         This is a convenience function that wraps the functionality of service_server()
         around a single function which returns a value to be sent back to the client.
         """
-        # CODE TO BE PUT IN CLIENT CORE
-        # def _srv_fun(func, headers, reqst):
-        #    retval = func(reqst.params)
-        #    service_server_return(reqst.id, retval)
-        #
-        # srvfun = lambda headers,params,f=func: _srv_fun(f, headers, params) 
-        # self.service_server(name, reqst_schema, reply_schema, srvfun)
         raise NotImplementedError()
 
     def service_server(self, name, reqst_schema, reply_schema, func):
@@ -130,26 +123,6 @@ class MiniBusClientAPI(object):
         Service returns value to client when a value is passed to either
         service_server_return() or service_server_error().
         """
-        # CODE TO BE PUT IN CLIENT CORE
-        # def _srv_cb(headers, reqst, func):
-        #    self.srv_workers[reqst.id] = headers.topic - "__request__"   (unset in server_server_return/error)
-        #    try:
-        #        func(reqst.params)
-        #    except Exception as e:
-        #        service_server_error(reqst.id, str(e)) 
-        #    else:
-        #        TODO: test if work id still exists. If it does, set a timer
-        #        to check on it again. If it still exists after the timer expires,
-        #        do the service_server_error() at that point in time and remove it.
-        #
-        # # Create Publishers for sending replys
-        # srv_reply_pub = self.publisher(name+"__reply__", reply_schema)
-        # srv_error_pub = self.publisher(name+"__error__", { })
-        # self.srv_pubs[name] = (srv_reply_pub, srv_error_pub)
-        #
-        # srvfun = lambda headers, reqst, f=func: _srv_cb(headers, reqst, f)
-        # self.subscribe(name+"__request__", reqst_schema, srvfun, headers = True)
-        # TODO: add information to a list of services this node provides
         raise NotImplementedError()
 
     def service_server_return(self, srvid, value):
@@ -401,6 +374,7 @@ class MiniBusClientCore(MiniBusClientAPI):
         self.service_server(name, reqst_schema, reply_schema, srv_fun)
 
     def service_server(self, name, reqst_schema, reply_schema, func):
+        # TODO: add information to a list of services this node provides?
         def _srv_cb(headers, reqst_data, func):
             try:
                 # Save the work request with the topic you received it on by
@@ -409,6 +383,7 @@ class MiniBusClientCore(MiniBusClientAPI):
                 func(headers["idstr"], reqst_data)
             except Exception as e:
                 self.service_server_error(headers["idstr"], str(e))
+                raise e
             else:
                 # TODO: test if work id still exists. If it does, set a timer
                 # to check on it again. If it still exists after the timer expires,
@@ -450,6 +425,32 @@ class MiniBusClientCore(MiniBusClientAPI):
         # name we will reply on
         error_topic = self._srv_namespacing(self._service_server_requests.pop(reqstid))[2]
         self._publish(error_topic, reqstid, value)
+
+    def service_client(self, name, reqst_schema, reply_schema, reply_cb, err_cb):
+        def _srv_request(data, topic_name):
+            """ This is similar to what a publisher returns, except this gives you the uuid back """
+            #TODO: publishers don't return anything normally, should we just do this all the time
+            # instead of making it a special case here?
+            reqstid = str(uuid.uuid4())
+            request_topic = self._srv_namespacing(name)[0]
+            self._publish(request_topic, reqstid, data)
+            return reqstid
+
+        # Get topic names
+        request_topic, reply_topic, error_topic = self._srv_namespacing(name)
+
+        # Create publishers and subscribers. We don't keep the publishers but
+        # this initializes them and registers their schemas
+        self.publisher(request_topic, reqst_schema)
+
+        reply_cb_wrapper = lambda headers, data, cb_func=reply_cb: cb_func(headers["idstr"], data)
+        err_cb_wrapper = lambda headers, data, cb_func=err_cb: cb_func(headers["idstr"], data)
+        self.subscribe(reply_topic, reply_schema, reply_cb_wrapper, headers=True)
+        self.subscribe(error_topic, { }, err_cb_wrapper, headers=True)
+
+        # Return a function to "call" the service with
+        return lambda data, name=name: _srv_request(data, name) 
+
 
 
 
@@ -496,6 +497,37 @@ if HAS_TWISTED:
             # If there is a run() defined, call it when the reactor starts up
             if hasattr(self, "run") and callable(getattr(self, "run")):
                 reactor.callInThread(self.run)
+
+        def service_func_client(self, name, reqst_schema, reply_schema):
+            class ServiceFuncClient(object):
+                def __init__(self, mbclient, name, reqst_schema, reply_schema):
+                    self.mbclient = mbclient
+                    self.callpub = self.mbclient.service_client(name, reqst_schema, reply_schema, self.reply_cb, self.err_cb)
+                    self._service_callbacks = dict()
+
+                def reply_cb(self, idstr, data):
+                    if idstr in self._service_callbacks.keys():
+                        self._service_callbacks[idstr].callback(data)
+                    #TODO: If thing not listed, set timer and try again
+
+                def err_cb(self, idstr, data):
+                    #TODO: Implement this
+                    self.reply_cb(idstr, data)  # Punt by sending error data to reply callback
+                    raise Exception("Implement Twisted Service Client Errors")
+
+
+                @defer.inlineCallbacks
+                def __call__(self, data):
+                    idstr = self.callpub(data)
+                    d = defer.Deferred()
+                    self._service_callbacks[idstr] = d
+                    # Wait for reply
+                    ret = yield d
+                    print "got", ret
+                    self._service_callbacks.pop(idstr)
+                    defer.returnValue(ret)
+
+            return ServiceFuncClient(self, name, reqst_schema, reply_schema)
 
         def send_packet(self, data):
             logger.debug("Asserting that we are running")
