@@ -94,22 +94,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("mbtt", description="MiniBus Topic Tool")
     parser.add_argument("--socket", action="store_true", help="uses socket interface instead of twisted")
     parser.add_argument("--name", type=str, default=None, help="MiniBus Client Name")
+    parser.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
     subparsers = parser.add_subparsers(dest="cmd")
 
     parser_echo = subparsers.add_parser('echo', help="listen to topic")
     parser_echo.add_argument("topic", type=str, help="topic pattern to listen to")
     parser_echo.add_argument("--schema", type=str, default="", help="topic schema")
     parser_echo.add_argument("--headers", action="store_true", help="Show topic headers")
-    parser_echo.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
 
     parser_pub = subparsers.add_parser('pub', help="publish to topic")
     parser_pub.add_argument("topic", type=str, help="topic pattern to listen to")
     parser_pub.add_argument("data", type=str, help="data to send - must be json")
     parser_pub.add_argument("--schema", type=str, default="", help="topic schema")
-    parser_pub.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
 
     parser_clients = subparsers.add_parser('clients', help="list clients")
-    parser_clients.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
 
     args = parser.parse_args()
     if "schema" in args.__dict__.keys():
