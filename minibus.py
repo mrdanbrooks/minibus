@@ -706,6 +706,8 @@ class MiniBusSocketClient(MiniBusClientCore):
             # If the above fails, we hang at recv. Send an empty packet to release it.
             self.s.sendto('\n', (self.addrinfo[4][0], 8005))
         self.s.close()
-        self._recv_thread.join()
+        # If called from the main thread, join with receiver before exiting
+        if not threading.current_thread() == self._recv_thread:
+            self._recv_thread.join()
 
 
