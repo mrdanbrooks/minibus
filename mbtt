@@ -9,26 +9,33 @@ import jsonschema
 import sys
 sys.DONT_WRITE_BYTECODE = True
 
-class TopicTool(MiniBusTwistedClient):
+class TopicTool(object):
     def __init__(self, args):
         self.args = args
-        MiniBusTwistedClient.__init__(self, cryptokey=self.args.cryptokey)
+
         self.pub = None
+        self.caller = None
         if self.args.cmd == "echo":
             self.subscribe(self.args.topic, self.args.schema, self.print_callback, headers=True)
         if self.args.cmd == "pub":
             self.subscribe(self.args.topic, self.args.schema, self.pub_confirm_callback)
             self.pub = self.publisher(self.args.topic, self.args.schema)
+        if self.args.cmd == "clients":
+            self.caller = self.service_client("/__minibus__/__listclients__", {"type": "null"}, {"type": "string"}, self.caller_callback, self.caller_callback)
+            self.callerid = None
 
     def print_callback(self, header, data):
         if self.args.headers:
             print header
         print data
 
+    def caller_callback(self, idstr, data):
+        print data 
+
     def pub_confirm_callback(self, data):
         """ exits program after confirming that data was sent """
         if str(data) == str(self.args.data):
-            self.exit_()
+            self.closedown()
 
     def run(self):
         if self.pub:
@@ -36,47 +43,57 @@ class TopicTool(MiniBusTwistedClient):
                 self.pub(self.args.data)
             except jsonschema.exceptions.ValidationError as e:
                 print e
-                self.exit_()
+                self.closedown()
 
-
-class SocketTool(MiniBusSocketClient):
-    def __init__(self, args):
-        self.args = args
-        MiniBusSocketClient.__init__(self, cryptokey=self.args.cryptokey)
-        self.pub = None
-        if self.args.cmd == "echo":
-            self.subscribe(self.args.topic, self.args.schema, self.print_callback, headers=True)
-        if self.args.cmd == "pub":
-            self.subscribe(self.args.topic, self.args.schema, self.pub_confirm_callback)
-            self.pub = self.publisher(self.args.topic, self.args.schema)
-
-    def print_callback(self, header, data):
-        if self.args.headers:
-            print header
-        print data
-
-    def pub_confirm_callback(self, data):
-        """ exits program after confirming that data was sent """
-        if str(data) == str(self.args.data):
-            self.close()
-            exit(0)
-
-    def run(self):
-        if self.pub:
+        elif self.caller:
             try:
-                self.pub(self.args.data)
+                self.callerid = self.caller(None)
             except jsonschema.exceptions.ValidationError as e:
                 print e
-                self.close()
-                exit(0)
-        else:
+                self.closedown()
+
+        if (not self.pub) and self.args.socket:
+            # Sockets need to be spun while twisted doesn't
             self.spin()
- 
+            self.closedown()
 
+
+
+class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
+    def __init__(self, args):
+        MiniBusTwistedClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
+        TopicTool.__init__(self, args)
+        
+    def closedown(self):
+        self.exit_()
+
+class SocketTopicTool(MiniBusSocketClient, TopicTool):
+    def __init__(self, args):
+        MiniBusSocketClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
+        TopicTool.__init__(self, args)
+
+    def closedown(self):
+        self.close()
+        exit(0)
+
+
+def multi_find_replace(text, patterns):
+    """ Finds and replaces multiple different strings in a piece of text.
+    text(str) : the text to do the find and replace inside.
+    patterns(dict) : a dictionary with keys being text to be replace by their values
+    Written by Andrew Clark 2011-05-11
+    http://stackoverflow.com/a/6117124
+    """
+    import re
+    rep = patterns
+    rep = dict((re.escape(k), v) for k,v in rep.iteritems())
+    pattern = re.compile("|".join(rep.keys()))
+    return pattern.sub(lambda m: rep[re.escape(m.group(0))], text)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("mbtt", description="MiniBus Topic Tool")
     parser.add_argument("--socket", action="store_true", help="uses socket interface instead of twisted")
+    parser.add_argument("--name", type=str, default=None, help="MiniBus Client Name")
     subparsers = parser.add_subparsers(dest="cmd")
 
     parser_echo = subparsers.add_parser('echo', help="listen to topic")
@@ -91,11 +108,24 @@ if __name__ == "__main__":
     parser_pub.add_argument("--schema", type=str, default="", help="topic schema")
     parser_pub.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
 
-    args = parser.parse_args()
-    if args.schema == "":
-        args.schema = dict()
-    else:
-        args.schema = json.loads(args.schema)
+    parser_clients = subparsers.add_parser('clients', help="list clients")
+    parser_clients.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
 
-    tt = TopicTool(args)
-    tt.exec_()
+    args = parser.parse_args()
+    if "schema" in args.__dict__.keys():
+        if args.schema == "":
+            args.schema = dict()
+        else:
+            # swap " and ' symbols in schema
+            args.schema = multi_find_replace(args.schema, {"\"": "'", "'": "\""})
+            args.schema = json.loads(args.schema)
+
+    if args.cmd =="pub" and args.data == "null":
+        args.data = None
+
+    if args.socket:
+        tt = SocketTopicTool(args)
+        tt.run()
+    else:
+        tt = TwistedTopicTool(args)
+        tt.exec_()
