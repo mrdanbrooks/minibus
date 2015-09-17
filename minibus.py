@@ -285,6 +285,9 @@ class MiniBusClientCore(MiniBusClientAPI):
                 jsonschema.validate(data, schema)
 
 #         packet = {"type": "data", "topic": name, "data": data}
+        # TODO: BIG BUG! Encryption only working with strings (apparently)
+        # Right now we make a data structer, validate it against the schema, encrypt the payload, then serialize the packet
+        # Should be make a data structure, validate against schema, serialize payload, encrypt payload, serialize packet
         packet = {"header": {"topic": name, "author": self._clientname, "idstr": idstr}, "data": data}
         jsonschema.validate(packet, busschema)
         # Encrypt if key specified
@@ -635,6 +638,11 @@ class MiniBusSocketClient(MiniBusClientCore):
         # Allow multiple copies of this program on one machine
         # (not strictly needed)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # This is used in the twisted framework and fixes the single connection problem in osx
+        # twisted/internet/udp.py MulticastPort().createInternetSocket()
+        # http://twistedmatrix.com/trac/browser/tags/releases/twisted-14.0.1/twisted/internet/udp.py
+        if hasattr(socket, "SO_REUSEPORT"):
+            self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         # Set Time-to-live (optional)
         self.ttl_bin = struct.pack('@i', 1)
