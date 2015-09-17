@@ -703,7 +703,8 @@ class MiniBusSocketClient(MiniBusClientCore):
         try:
             self.s.shutdown(socket.SHUT_RD)
         except socket.error:
-            pass
+            # If the above fails, we hang at recv. Send an empty packet to release it.
+            self.s.sendto('\n', (self.addrinfo[4][0], 8005))
         self.s.close()
         self._recv_thread.join()
 
