@@ -21,17 +21,27 @@ class TopicTool(object):
         if self.args.cmd == "pub":
             self.subscribe(self.args.topic, self.args.schema, self.pub_confirm_callback)
             self.pub = self.publisher(self.args.topic, self.args.schema)
+
         if self.args.cmd == "clients":
-            self.caller = self.service_client("/__minibus__/__listclients__", {"type": "null"}, {"type": "string"}, self.caller_callback, self.caller_callback)
+            self.caller = self.service_client("/__minibus__/__listclients__", {"type": "null"}, {"type": "string"}, self.clients_callback, self.clients_callback)
+            self.clients = list()
             self.callerid = None
+        if self.args.cmd == "publishers":
+            self.caller = self.service_client("/__minibus__/__publishers__", {"type": "null"}, {"type": "array"}, self.print_service_callback, self.print_service_callback)
+        if self.args.cmd == "subscribers":
+            self.caller = self.service_client("/__minibus__/__subscribers__", {"type": "null"}, {"type": "array"}, self.print_service_callback, self.print_service_callback)
+        if self.args.cmd == "services":
+            self.caller = self.service_client("/__minibus__/__service_servers__", {"type": "null"}, {"type": "array"}, self.print_service_callback, self.print_service_callback)
+
+
 
     def print_callback(self, header, data):
         if self.args.headers:
             print header
         print data
 
-    def caller_callback(self, idstr, data):
-        print data 
+    def print_service_callback(self, idstr, data):
+        print data
 
     def pub_confirm_callback(self, data):
         """ exits program after confirming that data was sent """
@@ -64,7 +74,18 @@ class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
     def __init__(self, args):
         MiniBusTwistedClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
         TopicTool.__init__(self, args)
-        
+
+    @MiniBusTwistedClient.inlineServiceCallbacks
+    def clients_callback(self, idstr, data):
+        client_info = list()
+        client_info.append(data)
+        if self.args.hostnames:
+            get_hostname = self.service_func_client("/__minibus__/%s/__hostname__", {"type": "null"}, {"type": "string"})
+            hostname = yield get_hostname(None)
+            client_info.append(hostname)
+        print client_info
+
+       
     def closedown(self):
         self.exit_()
 
@@ -72,6 +93,9 @@ class SocketTopicTool(MiniBusSocketClient, TopicTool):
     def __init__(self, args):
         MiniBusSocketClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
         TopicTool.__init__(self, args)
+
+    def clients_callback(self, idstr, data):
+        print data
 
     def closedown(self):
         self.close()
@@ -109,6 +133,13 @@ if __name__ == "__main__":
     parser_pub.add_argument("--schema", type=str, default="", help="topic schema")
 
     parser_clients = subparsers.add_parser('clients', help="list clients")
+    parser_clients.add_argument("--hostnames", action="store_true", help="show hostnames")
+
+    parser_publishers = subparsers.add_parser('publishers', help="list publishers")
+
+    parser_publishers = subparsers.add_parser('subscribers', help="list subscribers")
+
+    parser_publishers = subparsers.add_parser('services', help="list services")
 
     args = parser.parse_args()
     if "schema" in args.__dict__.keys():

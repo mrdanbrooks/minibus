@@ -195,11 +195,50 @@ class MiniBusClientCore(MiniBusClientAPI):
         jsonschema.Draft4Validator.check_schema(busschema)
 
         # Start common services
-        self.service_func_server("/__minibus__/__listclients__", {"type": "null"}, {"type": "string"}, self.__get_name) 
-        self.service_func_server("/__minibus__/%s/__publishers__" % self._clientname, {"type": "null"}, {"type": "array"}, self.__get_publishers)
-        self.service_func_server("/__minibus__/%s/__subscribers__" % self._clientname, {"type": "null"}, {"type": "array"}, self.__get_subscribers)
-        self.service_func_server("/__minibus__/%s/__service_servers__" % self._clientname, {"type": "null"}, {"type": "array"}, self.__get_service_servers)
-        self.service_func_server("/__minibus__/%s/__service_clients__" % self._clientname, {"type": "null"}, {"type": "array"}, self.__get_service_clients)
+        self.service_func_server("/__minibus__/__listclients__",
+                                 {"type": "null"},
+                                 {"type": "string"},
+                                 self.__get_name)
+        self.service_func_server("/__minibus__/__publishers__",
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_publishers)
+        self.service_func_server("/__minibus__/%s/__publishers__" % self._clientname,
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_publishers)
+        self.service_func_server("/__minibus__/__subscribers__",
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_subscribers)
+        self.service_func_server("/__minibus__/%s/__subscribers__" % self._clientname,
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_subscribers)
+        self.service_func_server("/__minibus__/__service_servers__",
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_service_servers)
+        self.service_func_server("/__minibus__/%s/__service_servers__" % self._clientname,
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_service_servers)
+        self.service_func_server("/__minibus__/__service_clients__",
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_service_clients)
+        self.service_func_server("/__minibus__/%s/__service_clients__" % self._clientname,
+                                 {"type": "null"},
+                                 {"type": "array"},
+                                 self.__get_service_clients)
+        self.service_func_server("/__minibus__/%s/__hostname__" % self._clientname,
+                                 {"type": "null"},
+                                 {"type": "string"},
+                                 self.__get_hostname)
+        self.service_func_server("/__minibus__/%s/__pid__" % self._clientname,
+                                 {"type": "null"},
+                                 {"type": "integer"},
+                                 self.__get_pid)
 
     def _get_iface_ip(self):
         """ Returns the ip address for a named interface """
@@ -478,6 +517,13 @@ class MiniBusClientCore(MiniBusClientAPI):
 
     def __get_name(self, params):
         return self._clientname
+
+    def __get_hostname(self, params):
+        import socket
+        return socket.gethostname()
+
+    def __get_pid(self, params):
+        return os.getpid()
 
     def __get_publishers(self, params):
         """ Service call function that returns a list of regular topic publishers by this client,
