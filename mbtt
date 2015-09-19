@@ -75,6 +75,8 @@ class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
         MiniBusTwistedClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
         TopicTool.__init__(self, args)
 
+        # These functions don't have definitive ends to them because we don't know
+        # how many responses we will get. So just timeout after about a second.
         if self.args.cmd in ["clients", "publishers", "subscribers", "services"]:
             from twisted.internet import reactor
             reactor.callLater(1, self.exit_)
