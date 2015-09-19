@@ -4,6 +4,7 @@ mbtt - MiniBus Topic Tool
 """
 import argparse
 from minibus import MiniBusTwistedClient, MiniBusSocketClient
+import uuid
 import json
 import jsonschema
 import sys
@@ -93,7 +94,7 @@ def multi_find_replace(text, patterns):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("mbtt", description="MiniBus Topic Tool")
     parser.add_argument("--socket", action="store_true", help="uses socket interface instead of twisted")
-    parser.add_argument("--name", type=str, default=None, help="MiniBus Client Name")
+    parser.add_argument("--name", type=str, default="mbtt-%s" % format(uuid.uuid4().fields[0], '02X'), help="MiniBus Client Name")
     parser.add_argument("--cryptokey", type=str, default=None, help="Encrypt data using this key")
     subparsers = parser.add_subparsers(dest="cmd")
 

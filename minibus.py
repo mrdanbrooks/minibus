@@ -16,6 +16,8 @@
 # This is a port of the minibus2.py file from homesec, with some additional comments
 # for adding service functionality
 
+import logging
+import logging.handlers
 import re
 import json
 import jsonschema
@@ -24,9 +26,13 @@ import random
 import uuid
 import netifaces as ni
 
-import lagerlogger
-logger = lagerlogger.LagerLogger("MiniBusClient")
-logger.console(lagerlogger.INFO)
+FATAL = logging.FATAL
+ERROR = logging.ERROR
+WARNING = logging.WARNING
+WARN = logging.WARN
+INFO = logging.INFO
+DEBUG = logging.DEBUG
+
 
 try:
     import gnupg  # Install with python-gnupg or py27-gnupg
@@ -163,8 +169,11 @@ busschema = {
 
 class MiniBusClientCore(MiniBusClientAPI):
    #pylint: disable=no-self-use,no-member 
-
     def __init__(self, name=None, iface=None, cryptokey=None):
+        # Set up Logging Mechanism
+        self._logger = MBLagerLogger("MiniBus")
+        self._logger.console(INFO)
+
         MiniBusClientAPI.__init__(self, name, iface)
         self._iface = iface
         self._clientname = name if name else str(uuid.uuid4())
@@ -247,7 +256,7 @@ class MiniBusClientCore(MiniBusClientAPI):
         return packet
 
     def recv_packet(self, datagram):
-        logger.debug("Received datagram=%s" % datagram)
+        self._logger.debug("Received datagram=%s" % datagram)
         packet = json.loads(datagram)
         jsonschema.validate(packet, busschema)
         if "gpg" in packet["header"]:
@@ -260,7 +269,7 @@ class MiniBusClientCore(MiniBusClientAPI):
             if pattern.match(topic):
                 # Make sure encapsulated data matches user specified schema
                 user_schema = self._topic_schemas[pattern]
-                logger.debug("Found matching pattern %s that will use schema %s "
+                self._logger.debug("Found matching pattern %s that will use schema %s "
                              % (pattern.pattern, user_schema))
                 jsonschema.validate(data, user_schema)
                 # push data to all the callbacks for this pattern (in a random order)
@@ -278,10 +287,10 @@ class MiniBusClientCore(MiniBusClientAPI):
         This function is wrapped in a lambda expression and returned by publisher()
         """
         # Make sure this data conforms to user schema
-        logger.debug("Attempting to publish %s" % data)
+        self._logger.debug("Attempting to publish %s" % data)
         for pattern, schema in self._topic_schemas.items():
             if pattern.match(name):
-                logger.debug("found matching pattern %s" % pattern.pattern)
+                self._logger.debug("found matching pattern %s" % pattern.pattern)
                 jsonschema.validate(data, schema)
 
 #         packet = {"type": "data", "topic": name, "data": data}
@@ -300,7 +309,7 @@ class MiniBusClientCore(MiniBusClientAPI):
         #       it needs updated to transmit over specific tcp ports eventually
         # TODO: Check to see if we have a matching data type?
         self.send_packet(packet)
-        logger.debug("Packet sent!")
+        self._logger.debug("Packet sent!")
 
     def subscribe(self, name_pattern, data_format, callback, headers=False):
         """ Instructs client to listen to topic matching 'topic_name'.
@@ -583,11 +592,11 @@ if HAS_TWISTED:
             return ServiceFuncClient(self, name, reqst_schema, reply_schema)
 
         def send_packet(self, data):
-            logger.debug("Asserting that we are running")
+            self._logger.debug("Asserting that we are running")
             self._assert_running()
-            logger.debug("Writing to transport")
+            self._logger.debug("Writing to transport")
             self.datagram_protocol.transport.write(data, ("228.0.0.5", 8005))
-            logger.debug("Finished")
+            self._logger.debug("Finished")
 
         def _assert_running(self):
             """ Check to make sure the reactor is running before continuing """
@@ -605,7 +614,7 @@ if HAS_TWISTED:
 
         def exit_(self):
             self._cleanup()
-            logger.debug("Disconnecting MiniBus Client")
+            self._logger.debug("Disconnecting MiniBus Client")
             reactor.stop()
 
         @staticmethod
@@ -693,9 +702,9 @@ class MiniBusSocketClient(MiniBusClientCore):
                 self.recv_packet(data)
 
     def send_packet(self, data):
-        logger.debug("Writing to transport")
+        self._logger.debug("Writing to transport")
         self.s.sendto(data + '\n', (self.addrinfo[4][0], 8005))
-        logger.debug("Finished")
+        self._logger.debug("Finished")
 
     def spin(self):
         """ A function to keep the main thread alive until keyboard interrput """
@@ -718,4 +727,35 @@ class MiniBusSocketClient(MiniBusClientCore):
         if not threading.current_thread() == self._recv_thread:
             self._recv_thread.join()
 
+
+class MBLagerLogger(logging.Logger):
+    """ King of Loggers - Embedded in Minibus to reduce dependencies """
+    def __init__(self, name, level=None):
+        logging.Logger.__init__(self, name, self.__level(level))
+        self.formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(message)s", "%Y-%m-%d %H:%M:%S")
+
+    def __level(self, lvl):
+        return lvl if lvl is not None else logging.DEBUG
+
+    def console(self, level):
+        """ adds a console handler """
+        ch = logging.StreamHandler()
+        ch.setLevel(self.__level(level))
+        ch.setFormatter(self.formatter)
+        self.addHandler(ch)
+
+    def logfile(self, level, path=None):
+        if path is None:
+            path = "log.log"
+        path = os.path.normpath(os.path.expanduser(path))
+        try:
+            # Attempt to set up the logger with specified log target
+            open(path, "a").close()
+            hdlr = logging.handlers.RotatingFileHandler(path, maxBytes=500000, backupCount=5)
+            hdlr.setLevel(self.__level(level))
+            hdlr.setFormatter(self.formatter)
+        except IOError:
+            logging.error('Failed to open file %s for logging' % logpath, exc_info=True)
+            sys.exit(1)
+        self.addHandler(hdlr)
 
