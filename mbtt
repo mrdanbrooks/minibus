@@ -75,6 +75,10 @@ class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
         MiniBusTwistedClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
         TopicTool.__init__(self, args)
 
+        if self.args.cmd in ["clients", "publishers", "subscribers", "services"]:
+            from twisted.internet import reactor
+            reactor.callLater(1, self.exit_)
+
     @MiniBusTwistedClient.inlineServiceCallbacks
     def clients_callback(self, idstr, data):
         client_info = list()
@@ -85,7 +89,6 @@ class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
             client_info.append(hostname)
         print client_info
 
-       
     def closedown(self):
         self.exit_()
 
