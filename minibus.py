@@ -308,27 +308,10 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
         pattern = re.compile(name_pattern)
         return pattern
 
-    def _decrypt_packet(self, packet):
-        """ Takes packet with armored symmetric gpg data and replaces it with plain text """
-        # TODO: Instead of encrypting just the data in the message, we should probably be wrapping everything?
-        if not HAS_GNUPG:
-            raise Exception("Received encrypted packet that I can't decrypt")
-        if not self._cryptokey:
-            raise Exception("Received encrypted packet, but I don't have a key")
-        gpgversion = packet["header"]["gpg"]
-        gpgtext = packet["data"]
-        # We are just sending the ciphertext and not the full message, so we need
-        # to reconstructe it here before we can decrypt it
-        ciphertext = "-----BEGIN PGP MESSAGE-----\nVersion: %s\n\n%s\n-----END PGP MESSAGE-----" % (gpgversion, gpgtext)
-        plaintext = self._gpg.decrypt(ciphertext, passphrase=self._cryptokey)
-        packet["data"] = plaintext
-        return packet
-
-    def _encrypt_packet(self, packet):
-        """ Takes packet with plain text data and replaces it with encrypted symmetric armored text """
+    def _encrypt_data(self, plaintext):
+        """ Encrypts data using gpg symmetric armored text. This is pretty bad and should be replaced """
         if not HAS_GNUPG:
             raise Exception("Attempting to encrypted packet, but I don't have gnupg")
-        plaintext = packet["data"]
         crypt = self._gpg.encrypt(plaintext, recipients=None, symmetric=True,
                             passphrase=self._cryptokey, armor=True)
         ciphertext = [x for x in crypt.data.split('\n') if len(x) > 0]
@@ -336,26 +319,36 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
         # First line is -----BEGIN PGP MESSAGE-----
         # Last line is -----END PGP MESSAGE-----
         ciphertext = ciphertext[1:-1]
-        # Second line is possibly Version: GnuPG vX.X.X
+        # Second line is possibly Version: GnuPG vX.X.X - remove it
         if ciphertext[0].strip().lower()[:7] == "version":
-            packet["header"]["gpg"] = ciphertext[0].strip()[9:]  # Populate with version
             ciphertext = ciphertext[1:]
-        else:
-            packet["header"]["gpg"] = "v0"
         # Combines all the lines into one long string of text
-        packet["data"] = "".join(ciphertext)
-        return packet
+        return "".join(ciphertext)
 
+    def _decrypt_data(self, ciphertext):
+        """ Takes packet with armored symmetric gpg data and replaces it with plain text """
+        # TODO: Instead of encrypting just the data in the message, we should probably be wrapping everything?
+        if not HAS_GNUPG:
+            raise Exception("Received encrypted packet that I can't decrypt")
+        if not self._cryptokey:
+            raise Exception("Received encrypted packet, but I don't have a key")
+        # We are just sending the ciphertext and not the full message, so we need
+        # to reconstructe it here before we can decrypt it
+        ciphertext = "-----BEGIN PGP MESSAGE-----\n\n%s\n-----END PGP MESSAGE-----" % ciphertext
+        plaintext = self._gpg.decrypt(ciphertext, passphrase=self._cryptokey)
+        return plaintext
+
+    
     def recv_packet(self, datagram):
         self._logger.debug("Received datagram=%s" % datagram)
+        # Check for empty data packets
         if len(datagram.strip()) == 0:
             self._logger.debug("Datagram was empty")
             return
+        # Deserialize packet
         packet = json.loads(datagram)
+        # Check packet schema
         jsonschema.validate(packet, busschema)
-        if "gpg" in packet["header"]:
-            packet = self._decrypt_packet(packet)
-
         topic = packet["header"]["topic"]
         header = packet["header"]
         data = packet["data"]
@@ -365,6 +358,13 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
                 user_schema = self._topic_schemas[pattern]
                 self._logger.debug("Found matching pattern %s that will use schema %s "
                              % (pattern.pattern, user_schema))
+                # Decrypt data
+                if "gpg" in packet["header"]:
+                    data = self._decrypt_data(data)
+                    data = data.data
+                # Deserialize data
+                data = json.loads(data)
+                # Validate data
                 jsonschema.validate(data, user_schema)
                 # push data to all the callbacks for this pattern (in a random order)
                 index_order = range(len(callbacks))
@@ -387,22 +387,20 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
             if pattern.match(name):
                 self._logger.debug("found matching pattern %s" % pattern.pattern)
                 jsonschema.validate(data, schema)
-
-#         packet = {"type": "data", "topic": name, "data": data}
-        # TODO: BIG BUG! Encryption only working with strings (apparently)
-        # Right now we make a data structer, validate it against the schema, encrypt the payload, then serialize the packet
-        # Should be make a data structure, validate against schema, serialize payload, encrypt payload, serialize packet
-        packet = {"header": {"topic": name, "author": self._clientname, "idstr": idstr}, "data": data}
-        jsonschema.validate(packet, busschema)
-        # Encrypt if key specified
+        # Serialize
+        data = json.dumps(data)
+        # Encrypt
         if self._cryptokey:
-            packet = self._encrypt_packet(packet)
-
+            data = self._encrypt_data(data)
+        # Packetize
+        packet = {"header": {"topic": name, "author": self._clientname, "idstr": idstr}, "data": data}
+        if self._cryptokey:
+            packet["header"]["gpg"] = 'yes'
+        jsonschema.validate(packet, busschema)
         # Serialize
         packet = json.dumps(packet)
-        # TODO: This assumes all data is being sent locally over the control bus.
+        # NOTE: This assumes all data is being sent locally over the control bus.
         #       it needs updated to transmit over specific tcp ports eventually
-        # TODO: Check to see if we have a matching data type?
         self.send_packet(packet)
         self._logger.debug("Packet sent!")
 
@@ -697,7 +695,7 @@ class MiniBusSocketClient(MiniBusClientCore):
     https://ep2013.europython.eu/media/conference/slides/using-sockets-in-python.html
     """
     def __init__(self, name=None, cryptokey=None):
-        MiniBusClientCore.__init__(self, name, cryptokey)
+        MiniBusClientCore.__init__(self, name=name, cryptokey=cryptokey)
         self.addrinfo = socket.getaddrinfo("228.0.0.5", None)[0]
         self.s = socket.socket(self.addrinfo[0], socket.SOCK_DGRAM)
 
