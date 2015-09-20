@@ -166,35 +166,9 @@ busschema = {
     "additionalProperties": False
 }
 
-
-class MiniBusClientCore(MiniBusClientAPI):
-   #pylint: disable=no-self-use,no-member 
-    def __init__(self, name=None, iface=None, cryptokey=None):
-        # Set up Logging Mechanism
-        self._logger = MBLagerLogger("MiniBus")
-        self._logger.console(INFO)
-
-        MiniBusClientAPI.__init__(self, name, iface)
-        self._iface = iface
-        self._clientname = name if name else str(uuid.uuid4())
-        self._cryptokey = cryptokey
-        if cryptokey:
-            if not HAS_GNUPG:
-                raise Exception("cryptokey was provided, but gnupg module not installed.")
-            self._gpg = gnupg.GPG()
-
-        self._subscriptions = dict()  # topicname(regex): callbacks(list(func))
-        # topic patterns (subscriptions and publications) must have a single schema
-        self._topic_schemas = dict()  # topicname(regex): jsonschema(dict)
-
-        self._publishers = list()  # List of published topics: only for keeping track to be reported by __get_publishers
-        # Services
-        self._service_server_requests = dict()  # requestid(str): "servicetopicsharedname/"
-
-        # Make sure our schema is good
-        jsonschema.Draft4Validator.check_schema(busschema)
-
-        # Start common services
+class MiniBusClientCoreServices(object):
+    """ Embedded Services """
+    def __init__(self):
         self.service_func_server("/__minibus__/__listclients__",
                                  {"type": "null"},
                                  {"type": "string"},
@@ -239,6 +213,84 @@ class MiniBusClientCore(MiniBusClientAPI):
                                  {"type": "null"},
                                  {"type": "integer"},
                                  self.__get_pid)
+
+
+    def __get_name(self, params):
+        return self._clientname
+
+    def __get_hostname(self, params):
+        import socket
+        return socket.gethostname()
+
+    def __get_pid(self, params):
+        return os.getpid()
+
+    def __get_publishers(self, params):
+        """ Service call function that returns a list of regular topic publishers by this client,
+        not including topics related to services.
+        """
+        pubs = copy.deepcopy(self._publishers)
+        # Remove publishers for services
+        pubs = [p for p in pubs if p.split("/")[-1] not in ["__request__", "__reply__", "__error__"]]
+        return pubs
+
+    def __get_subscribers(self, params):
+        # Subscription topics are stored in compiled regular expressions.
+        # They are automatically bounded by the characters ^ and $ to delimit the string.
+        # Turn keys into strings and remove the bounding characters so we can see the original string
+        subs = [p.pattern[1:-1] for p in self._subscriptions.keys()]
+        # Remove subscriptions for services
+        subs = [s for s in subs if s.split("/")[-1] not in ["__request__", "__reply__", "__error__"]]
+        return subs
+
+    def __get_service_servers(self, params):
+        subs = [p.pattern[1:-1] for p in self._subscriptions.keys()]
+        subs = [s for s in subs if s.split("/")[-1] == "__request__"]
+        # Just get the base name without the __request__, __reply__, __error__
+        subs = [p[:p.rfind("/")] for p in subs]  
+        # Filter out Built-in services
+        subs = [s for s in subs if not re.match("^/__minibus__/", s)]
+        return subs
+
+    def __get_service_clients(self, params):
+        pubs = copy.deepcopy(self._publishers)
+        pubs = [p[:p.rfind("/")] for p in pubs if p.split("/")[-1] == "__request__"]
+        # Filter out Built-in services
+        pubs = [p for p in pubs if not re.match("^/__minibus__/", p)]
+        return pubs
+
+
+
+class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
+   #pylint: disable=no-self-use,no-member 
+    def __init__(self, name=None, iface=None, cryptokey=None):
+        # Set up Logging Mechanism
+        self._logger = MBLagerLogger("MiniBus")
+        self._logger.console(INFO)
+
+        MiniBusClientAPI.__init__(self, name, iface)
+        self._iface = iface
+        self._clientname = name if name else str(uuid.uuid4())
+        self._cryptokey = cryptokey
+        if cryptokey:
+            if not HAS_GNUPG:
+                raise Exception("cryptokey was provided, but gnupg module not installed.")
+            self._gpg = gnupg.GPG()
+
+        self._subscriptions = dict()  # topicname(regex): callbacks(list(func))
+        # topic patterns (subscriptions and publications) must have a single schema
+        self._topic_schemas = dict()  # topicname(regex): jsonschema(dict)
+
+        self._publishers = list()  # List of published topics: only for keeping track to be reported by __get_publishers
+        # Services
+        self._service_server_requests = dict()  # requestid(str): "servicetopicsharedname/"
+
+        # Make sure our schema is good
+        jsonschema.Draft4Validator.check_schema(busschema)
+
+        # Start common services
+        MiniBusClientCoreServices.__init__(self)
+
 
     def _get_iface_ip(self):
         """ Returns the ip address for a named interface """
@@ -514,54 +566,6 @@ class MiniBusClientCore(MiniBusClientAPI):
 
         # Return a function to "call" the service with
         return lambda data, name=name: _srv_request(data, name) 
-
-    ############################
-    ## Built-in Service Calls ##
-    ############################
-
-    def __get_name(self, params):
-        return self._clientname
-
-    def __get_hostname(self, params):
-        import socket
-        return socket.gethostname()
-
-    def __get_pid(self, params):
-        return os.getpid()
-
-    def __get_publishers(self, params):
-        """ Service call function that returns a list of regular topic publishers by this client,
-        not including topics related to services.
-        """
-        pubs = copy.deepcopy(self._publishers)
-        # Remove publishers for services
-        pubs = [p for p in pubs if p.split("/")[-1] not in ["__request__", "__reply__", "__error__"]]
-        return pubs
-
-    def __get_subscribers(self, params):
-        # Subscription topics are stored in compiled regular expressions.
-        # They are automatically bounded by the characters ^ and $ to delimit the string.
-        # Turn keys into strings and remove the bounding characters so we can see the original string
-        subs = [p.pattern[1:-1] for p in self._subscriptions.keys()]
-        # Remove subscriptions for services
-        subs = [s for s in subs if s.split("/")[-1] not in ["__request__", "__reply__", "__error__"]]
-        return subs
-
-    def __get_service_servers(self, params):
-        subs = [p.pattern[1:-1] for p in self._subscriptions.keys()]
-        subs = [s for s in subs if s.split("/")[-1] == "__request__"]
-        # Just get the base name without the __request__, __reply__, __error__
-        subs = [p[:p.rfind("/")] for p in subs]  
-        # Filter out Built-in services
-        subs = [s for s in subs if not re.match("^/__minibus__/", s)]
-        return subs
-
-    def __get_service_clients(self, params):
-        pubs = copy.deepcopy(self._publishers)
-        pubs = [p[:p.rfind("/")] for p in pubs if p.split("/")[-1] == "__request__"]
-        # Filter out Built-in services
-        pubs = [p for p in pubs if not re.match("^/__minibus__/", p)]
-        return pubs
 
 
 
