@@ -23,17 +23,23 @@ class TopicTool(object):
             self.pub = self.publisher(self.args.topic, self.args.schema)
 
         if self.args.cmd == "clients":
-            self.caller = self.service_client("/__minibus__/__listclients__", {"type": "null"}, {"type": "string"}, self.clients_callback, self.clients_callback)
+            self.caller = self.service_client("/__minibus__/__listclients__",
+                                              {"type": "null"}, {"type": "string"},
+                                              self.clients_callback, self.clients_callback)
             self.clients = list()
             self.callerid = None
         if self.args.cmd == "publishers":
-            self.caller = self.service_client("/__minibus__/__publishers__", {"type": "null"}, {"type": "array"}, self.print_service_callback, self.print_service_callback)
+            self.caller = self.service_client("/__minibus__/__publishers__",
+                                              {"type": "null"}, {"type": "array"},
+                                              self.print_service_callback, self.print_service_callback)
         if self.args.cmd == "subscribers":
-            self.caller = self.service_client("/__minibus__/__subscribers__", {"type": "null"}, {"type": "array"}, self.print_service_callback, self.print_service_callback)
+            self.caller = self.service_client("/__minibus__/__subscribers__",
+                                              {"type": "null"}, {"type": "array"},
+                                              self.print_service_callback, self.print_service_callback)
         if self.args.cmd == "services":
-            self.caller = self.service_client("/__minibus__/__service_servers__", {"type": "null"}, {"type": "array"}, self.print_service_callback, self.print_service_callback)
-
-
+            self.caller = self.service_client("/__minibus__/__service_servers__",
+                                              {"type": "null"}, {"type": "array"},
+                                              self.print_service_callback, self.print_service_callback)
 
     def print_callback(self, header, data):
         if self.args.headers:
@@ -88,8 +94,49 @@ class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
         if self.args.hostnames:
             get_hostname = self.service_func_client("/__minibus__/%s/__hostname__" % data, {"type": "null"}, {"type": "string"})
             hostname = yield get_hostname(None)
-            client_info.append(hostname)
-        print client_info
+
+        if self.args.pids:
+            get_pid = self.service_func_client("/__minibus__/%s/__pid__" % data, 
+                                               {"type": "null"}, 
+                                               {"type": "integer"})
+            pid = yield get_pid(None)
+
+        if self.args.publishers:
+            get_publishers = self.service_func_client("/__minibus__/%s/__publishers__" % data, 
+                                                      {"type": "null"}, 
+                                                      {"type": "array"})
+            publishers = yield get_publishers(None)
+
+        if self.args.subscribers:
+            get_subscribers = self.service_func_client("/__minibus__/%s/__subscribers__" % data, 
+                                                      {"type": "null"}, 
+                                                      {"type": "array"})
+            subscribers = yield get_subscribers(None)
+
+        if self.args.services:
+            get_services = self.service_func_client("/__minibus__/%s/__service_servers__" % data, 
+                                                      {"type": "null"}, 
+                                                      {"type": "array"})
+            services = yield get_services(None)
+
+        print client_info[0]+":"
+        if self.args.pids:
+            print "  PID: %d" % pid
+        if self.args.hostnames:
+            print "  HOSTNAME: %s" % hostname
+        if self.args.publishers:
+            print "  PUBLISHES:"
+            for p in publishers:
+                print "\t%s" % p
+        if self.args.subscribers:
+            print "  SUBSCRIBES:"
+            for s in subscribers:
+                print "\t%s" % s
+        if self.args.services:
+            print "  SERVICES:"
+            for s in services:
+                print "\t%s" % s
+        print ""
 
     def closedown(self):
         self.exit_()
@@ -140,6 +187,10 @@ if __name__ == "__main__":
 
     parser_clients = subparsers.add_parser('clients', help="list clients")
     parser_clients.add_argument("--hostnames", action="store_true", help="show hostnames")
+    parser_clients.add_argument("--pids", action="store_true", help="show pids")
+    parser_clients.add_argument("--publishers", action="store_true", help="show publishers")
+    parser_clients.add_argument("--subscribers", action="store_true", help="show subscribers")
+    parser_clients.add_argument("--services", action="store_true", help="show services")
 
     parser_publishers = subparsers.add_parser('publishers', help="list publishers")
 
