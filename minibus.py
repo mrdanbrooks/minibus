@@ -288,7 +288,7 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
         # Make sure our schema is good
         jsonschema.Draft4Validator.check_schema(busschema)
 
-        # Start common services
+        # Start common services - this should only be done after everything else is loaded.
         MiniBusClientCoreServices.__init__(self)
 
 
