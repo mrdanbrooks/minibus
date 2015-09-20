@@ -86,13 +86,14 @@ class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
         client_info = list()
         client_info.append(data)
         if self.args.hostnames:
-            get_hostname = self.service_func_client("/__minibus__/%s/__hostname__", {"type": "null"}, {"type": "string"})
+            get_hostname = self.service_func_client("/__minibus__/%s/__hostname__" % data, {"type": "null"}, {"type": "string"})
             hostname = yield get_hostname(None)
             client_info.append(hostname)
         print client_info
 
     def closedown(self):
         self.exit_()
+
 
 class SocketTopicTool(MiniBusSocketClient, TopicTool):
     def __init__(self, args):
