@@ -296,6 +296,9 @@ class MiniBusClientCore(MiniBusClientAPI):
 
     def recv_packet(self, datagram):
         self._logger.debug("Received datagram=%s" % datagram)
+        if len(datagram.strip()) == 0:
+            self._logger.debug("Datagram was empty")
+            return
         packet = json.loads(datagram)
         jsonschema.validate(packet, busschema)
         if "gpg" in packet["header"]:
@@ -317,6 +320,7 @@ class MiniBusClientCore(MiniBusClientAPI):
                 for i in index_order:
                     #TODO: Spawn in new thread, then wait for all to join before exiting
                     callbacks[i](header, data)
+#                     self._run_callback(callbacks[i], header, data)
 
     def send_packet(self, datagram):
         raise NotImplementedError()
@@ -610,6 +614,7 @@ if HAS_TWISTED:
             class ServiceFuncClient(object):
                 def __init__(self, mbclient, name, reqst_schema, reply_schema):
                     self.mbclient = mbclient
+                    self.name = name
                     self.callpub = self.mbclient.service_client(name, reqst_schema, reply_schema, self.reply_cb, self.err_cb)
                     self._service_callbacks = dict()
 
@@ -631,7 +636,6 @@ if HAS_TWISTED:
                     self._service_callbacks[idstr] = d
                     # Wait for reply
                     ret = yield d
-                    print "got", ret
                     self._service_callbacks.pop(idstr)
                     defer.returnValue(ret)
 
@@ -648,6 +652,9 @@ if HAS_TWISTED:
             """ Check to make sure the reactor is running before continuing """
             if not reactor.running:
                 raise Exception("This API call must only be called after start()")
+
+        def _run_callback(self, cb, header, data):
+            reactor.callLater(0, cb, header, data)
 
         def exec_(self):
             reactor.run()
@@ -751,6 +758,10 @@ class MiniBusSocketClient(MiniBusClientCore):
         self._logger.debug("Writing to transport")
         self.s.sendto(data + '\n', (self.addrinfo[4][0], 8005))
         self._logger.debug("Finished")
+
+    def _run_callback(self, cb, header, data):
+        thread = threading.Thread(target=cb, args=(header, data))
+        thread.start()
 
     def spin(self):
         """ A function to keep the main thread alive until keyboard interrput """
