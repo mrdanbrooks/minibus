@@ -266,7 +266,7 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
     def __init__(self, name=None, iface=None, cryptokey=None):
         # Set up Logging Mechanism
         self._logger = MBLagerLogger("MiniBus")
-        self._logger.console(INFO)
+        self._logger.console(DEBUG)
 
         MiniBusClientAPI.__init__(self, name, iface)
         self._iface = iface
@@ -320,8 +320,9 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
         # Last line is -----END PGP MESSAGE-----
         ciphertext = ciphertext[1:-1]
         # Second line is possibly Version: GnuPG vX.X.X - remove it
-        if ciphertext[0].strip().lower()[:7] == "version":
-            ciphertext = ciphertext[1:]
+        if len(ciphertext) > 0 and len(ciphertext[0].strip()) > 0:
+            if ciphertext[0].strip().lower()[:7] == "version":
+                ciphertext = ciphertext[1:]
         # Combines all the lines into one long string of text
         return "".join(ciphertext)
 
@@ -613,6 +614,7 @@ if HAS_TWISTED:
                 reactor.callInThread(self.run)
 
         def service_func_client(self, name, reqst_schema, reply_schema):
+            """ This implementation is somewhat specific to twisted """
             class ServiceFuncClient(object):
                 def __init__(self, mbclient, name, reqst_schema, reply_schema):
                     self.mbclient = mbclient
