@@ -66,30 +66,6 @@ class MiniBusClientAPI(object):
 
     def service_client_func(self, name, reqst_schema, reply_schema):
         """ Returns a function for calling a remote service """
-        # request(srv_reqst_pub, reqst_schema, data):
-        #    srvid = uuid.uuid4()
-        #    # Create publisher
-        #    srv_reqst_pub = self.publisher(name+"__request__", reqst_schema)
-        #
-        #    # Create subscriber
-        #    def reply_receiver(srvid, data):
-        #        # TODO: Somehow make sure we are waiting on this srvid
-        #        self.srv_replies[srvid] = data
-        #        self.unsubscribe(selfptr)
-        #    srv_reply_recver = lambda reply_receiver(srvid, data)
-        #    self.subscribe(name+"__reply__", reply_schema, reply_receiver)
-        #
-        #    reqst_packet = reqstwrapp(name, srvid, data)
-        #    srv_reqst_pub(reqst_packet)
-        #    while(wait and srvid not in self.srv_replies.keys() and srvid not in self.srv_errors.keys()):
-        #        sleep
-        #    if srvid not in self.srv_replies.keys()
-        #         raise Exception
-        #    if srvid not in self.srv_errors.keys()
-        #         raise Exception
-        #    retval = self.srv_replies[srvid]
-        #    pop(self.srv_replies[srvid])
-        #    return retval
         raise NotImplementedError()
 
     def service_client(self, name, reqst_schema, reply_schema, reply_cb, err_cb):
