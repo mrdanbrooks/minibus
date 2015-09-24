@@ -266,7 +266,7 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
     def __init__(self, name=None, iface=None, cryptokey=None):
         # Set up Logging Mechanism
         self._logger = MBLagerLogger("MiniBus")
-        self._logger.console(DEBUG)
+        self._logger.console(INFO)
 
         MiniBusClientAPI.__init__(self, name, iface)
         self._iface = iface
@@ -371,9 +371,12 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
                 index_order = range(len(callbacks))
                 random.shuffle(index_order)
                 for i in index_order:
-                    #TODO: Spawn in new thread, then wait for all to join before exiting
-                    callbacks[i](header, data)
-#                     self._run_callback(callbacks[i], header, data)
+#                     callbacks[i](header, data)
+                    #NOTE: This was changed out for the above because socket
+                    # implementation of service_func_client would hang waiting
+                    # for a response in mbtt. This fixes it, although I have not
+                    # traced the exact reason why the above was not working
+                    self._run_callback(callbacks[i], header, data)
 
     def send_packet(self, datagram):
         raise NotImplementedError()
@@ -730,6 +733,7 @@ class MiniBusSocketClient(MiniBusClientCore):
 
         # Start receiving thread
         self._running = False
+        self._lock = threading.Lock()
         self._recv_thread = threading.Thread(target=self.recv_thread)
         self._recv_thread.start()
 
@@ -758,6 +762,44 @@ class MiniBusSocketClient(MiniBusClientCore):
             if data:
                 self.recv_packet(data)
 
+    def service_func_client(self, name, reqst_schema, reply_schema):
+        """ This implementation is somewhat specific to the threaded sockets """
+        class ServiceFuncClient(object):
+            def __init__(self, mbclient, name, reqst_schema, reply_schema):
+                self.mbclient = mbclient
+                self._service_replies = dict()
+                self.callpub = self.mbclient.service_client(name, reqst_schema, reply_schema, self.reply_cb, self.err_cb)
+                self._lock = threading.Lock()
+                self._error = False
+
+            def reply_cb(self, idstr, data):
+#                 with self._lock:
+#                     print "submitted", data
+                self._service_replies[idstr] = data
+                # TODO IF thing not listed, set timer and try again?
+
+            def err_cb(self, idstr, data):
+                # TODO: This is a real dirty way of doing this
+                self._error = True
+
+            def __call__(self, data):
+                idstr = self.callpub(data)
+                self._error = False
+                while self.mbclient._running and not self._error:
+                    if idstr in self._service_replies.keys():
+                        break
+                    time.sleep(0.001)
+                if not self.mbclient._running:
+                    raise Exception("Shutting down") 
+
+                if self._error:
+                    raise NotImplementedException("Implemented this error")
+
+                with self._lock:
+                    return self._service_replies.pop(idstr)
+        return ServiceFuncClient(self, name, reqst_schema, reply_schema)
+
+
     def send_packet(self, data):
         self._logger.debug("Writing to transport")
         self.s.sendto(data + '\n', (self.addrinfo[4][0], 8005))
@@ -778,12 +820,15 @@ class MiniBusSocketClient(MiniBusClientCore):
     def close(self):
         """ Properly shutdown all the connections """
         self._running = False
-        try:
-            self.s.shutdown(socket.SHUT_RD)
-        except socket.error:
-            # If the above fails, we hang at recv. Send an empty packet to release it.
-            self.s.sendto('\n', (self.addrinfo[4][0], 8005))
-        self.s.close()
+        with self._lock:
+            if self.s:
+                try:
+                    self.s.shutdown(socket.SHUT_RD)
+                except socket.error:
+                    # If the above fails, we hang at recv. Send an empty packet to release it.
+                    self.s.sendto('\n', (self.addrinfo[4][0], 8005))
+                self.s.close()
+                self.s = None  # Prevent socket from trying to be closed a second time
         # If called from the main thread, join with receiver before exiting
         if not threading.current_thread() == self._recv_thread:
             self._recv_thread.join()

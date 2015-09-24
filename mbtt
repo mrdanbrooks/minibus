@@ -147,8 +147,59 @@ class SocketTopicTool(MiniBusSocketClient, TopicTool):
         MiniBusSocketClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
         TopicTool.__init__(self, args)
 
+        if self.args.cmd in ["clients", "publishers", "subscribers", "services"]:
+            import threading
+            threading.Timer(1.0, self.closedown).start()
+
+
     def clients_callback(self, idstr, data):
-        print data
+        if self.args.hostnames:
+            get_hostname = self.service_func_client("/__minibus__/%s/__hostname__" % data, {"type": "null"}, {"type": "string"})
+            hostname = get_hostname(None)
+
+        if self.args.pids:
+            get_pid = self.service_func_client("/__minibus__/%s/__pid__" % data, 
+                                               {"type": "null"}, 
+                                               {"type": "integer"})
+            pid = get_pid(None)
+
+        if self.args.publishers:
+            get_publishers = self.service_func_client("/__minibus__/%s/__publishers__" % data, 
+                                                      {"type": "null"}, 
+                                                      {"type": "array"})
+            publishers = get_publishers(None)
+
+        if self.args.subscribers:
+            get_subscribers = self.service_func_client("/__minibus__/%s/__subscribers__" % data, 
+                                                      {"type": "null"}, 
+                                                      {"type": "array"})
+            subscribers = get_subscribers(None)
+
+        if self.args.services:
+            get_services = self.service_func_client("/__minibus__/%s/__service_servers__" % data, 
+                                                      {"type": "null"}, 
+                                                      {"type": "array"})
+            services = get_services(None)
+
+        print data+":"
+        if self.args.pids:
+            print "  PID: %d" % pid
+        if self.args.hostnames:
+            print "  HOSTNAME: %s" % hostname
+        if self.args.publishers:
+            print "  PUBLISHES:"
+            for p in publishers:
+                print "\t%s" % p
+        if self.args.subscribers:
+            print "  SUBSCRIBES:"
+            for s in subscribers:
+                print "\t%s" % s
+        if self.args.services:
+            print "  SERVICES:"
+            for s in services:
+                print "\t%s" % s
+        print ""
+
 
     def closedown(self):
         self.close()
