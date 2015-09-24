@@ -136,7 +136,7 @@ busschema = {
     "type": "object",
     "properties": {
         "header": data_header,
-        "data": {},
+        "data": {"type": "string"},  # This is serialized json data
     },
     "required": ["header", "data"],
     "additionalProperties": False
