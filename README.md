@@ -63,19 +63,11 @@ class MiniBusClientAPI(object):
 
     def unsubscribe(self, name_pattern, callback):
 
-    def service_client_func(self, name, reqst_schema, reply_schema):
-        """ Returns a function for calling a remote service """
-
     def service_client(self, name, reqst_schema, reply_schema, reply_cb, err_cb):
 
     def service_func_client(self, name, reqst_schema, reply_schema):
         """ Returns a function that behaves like a local function.
         retval = proxyfunc(params)
-        """
-
-    def service_cb_client(self, name, reqst_schema, reply_schema, callback, errback):
-        """ Returns a function to call the service with. Replies are received in callbacks.
-            proxyfunc(param): returns srvid that will be received by callbacks along with reply
         """
 
     def service_func_server(self, name, reqst_schema, reply_schema, func):
