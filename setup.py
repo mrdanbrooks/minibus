@@ -24,7 +24,8 @@ setup(name='minibus',
       ],
       keywords='minibus, publish/subscribe, ipc, development',
 
-      packages=['minibus'],
+#       packages=['minibus'],
+      py_modules=['minibus'],
 
       install_requires=['jsonschema','netifaces'],
 
