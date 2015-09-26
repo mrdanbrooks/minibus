@@ -64,10 +64,6 @@ class MiniBusClientAPI(object):
     def unsubscribe(self, name_pattern, callback):
         raise NotImplementedError()
 
-    def service_client_func(self, name, reqst_schema, reply_schema):
-        """ Returns a function for calling a remote service """
-        raise NotImplementedError()
-
     def service_client(self, name, reqst_schema, reply_schema, reply_cb, err_cb):
         # This should set up resources for sending and receiving data with remote service
         # requester(params): Sends data to remote service. Returns srvid value
@@ -77,23 +73,6 @@ class MiniBusClientAPI(object):
     def service_func_client(self, name, reqst_schema, reply_schema):
         """ Returns a function that behaves like a local function.
         retval = proxyfunc(params)
-        """
-        raise NotImplementedError()
-
-    def service_cb_client(self, name, reqst_schema, reply_schema, callback, errback):
-        """ Returns a function to call the service with. Replies are received in callbacks.
-            proxyfunc(param): returns srvid that will be received by callbacks along with reply
-        """
-        # the proxy func and callbacks all need to be wrapped in something for
-        # encoding and decoding the service packet
-        raise NotImplementedError()
-
-    def service_func_server(self, name, reqst_schema, reply_schema, func):
-        """ Provides a named network service linked to a local function.
-        my_func(params...)
-        Client receives the value returned by the function.
-        This is a convenience function that wraps the functionality of service_server()
-        around a single function which returns a value to be sent back to the client.
         """
         raise NotImplementedError()
 
@@ -107,15 +86,21 @@ class MiniBusClientAPI(object):
         """
         raise NotImplementedError()
 
+    def service_func_server(self, name, reqst_schema, reply_schema, func):
+        """ Provides a named network service linked to a local function.
+        my_func(params...)
+        Client receives the value returned by the function.
+        This is a convenience function that wraps the functionality of service_server()
+        around a single function which returns a value to be sent back to the client.
+        """
+        raise NotImplementedError()
+
     def service_server_return(self, srvid, value):
         """ Used by a service server to send a return value to a service client """
         raise NotImplementedError()
 
     def service_server_error(self, srvid, value):
         """ Used by a service server to send an error value to a service client """
-        raise NotImplementedError()
-
-    def client_info(self, name):
         raise NotImplementedError()
 
 data_header = {
