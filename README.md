@@ -37,6 +37,70 @@ Some topic names can have special meanings.
 For example, names that start and end with a double underscore are not displayed by the ``mbtt`` tool (e.g. ``__hidden_topic__``).
 This convention does not hide topics from other client, rather it is mostly used to mask internal components of the minibus system. 
 
+### Services
+Services use the same naming conventions and message schema concepts as topics, and make use of topic namespaces.
+A service is specified by a name and two schemas - one defining parameters (arguments) being passed to the service and one defining the return value.
+Service requests are tied directly to reply messages, so when multiple clients are connected to a single *service server* only the calling client will receive the corresponding reply message.
+
+#### Services Over Topics
+Services are implemented using MiniBus topics.
+The service name is used to specify a topic namespace under which three well-known topics are automatically created.
+One topic (``__request__``) is used for *calling* the service and sending parameters to be used for execution.
+If the service finishes executing normally and returns a value, this is passed back to the calling client on the ``__reply__`` topic.
+Otherwise, if an exception occurs while executing the service, the error message is returned to the calling client on the ``__error__`` topic.
+This implementation is abstracted by the client interface.
+
+## Python API
+
+```
+class MiniBusClientAPI(object):
+    """ Defines the public API for interacting with the minibus """
+    def __init__(self, name, iface=None):
+
+    def publisher(self, topic_name, data_format):
+
+    def subscribe(self, name_pattern, data_format, callback, headers=False):
+
+    def unsubscribe(self, name_pattern, callback):
+
+    def service_client_func(self, name, reqst_schema, reply_schema):
+        """ Returns a function for calling a remote service """
+
+    def service_client(self, name, reqst_schema, reply_schema, reply_cb, err_cb):
+
+    def service_func_client(self, name, reqst_schema, reply_schema):
+        """ Returns a function that behaves like a local function.
+        retval = proxyfunc(params)
+        """
+
+    def service_cb_client(self, name, reqst_schema, reply_schema, callback, errback):
+        """ Returns a function to call the service with. Replies are received in callbacks.
+            proxyfunc(param): returns srvid that will be received by callbacks along with reply
+        """
+
+    def service_func_server(self, name, reqst_schema, reply_schema, func):
+        """ Provides a named network service linked to a local function.
+        my_func(params...)
+        Client receives the value returned by the function.
+        This is a convenience function that wraps the functionality of service_server()
+        around a single function which returns a value to be sent back to the client.
+        """
+
+    def service_server(self, name, reqst_schema, reply_schema, func):
+        """ Provides a named network service. Service work is received by the
+        func parameter, including an srvid value and received parameters.
+        The srvid value is used to identify the client's "work order" information
+        and must be passed to one of the two reply functions.
+        Service returns value to client when a value is passed to either
+        service_server_return() or service_server_error().
+        """
+
+    def service_server_return(self, srvid, value):
+        """ Used by a service server to send a return value to a service client """
+
+    def service_server_error(self, srvid, value):
+        """ Used by a service server to send an error value to a service client """
+```
 
 ## Bus Protocol
 The current version of MiniBus sends all messages over Multicast UDP at address ``228.0.0.5:8005``.
