@@ -50,7 +50,7 @@ except ImportError:
 
 class MiniBusClientAPI(object):
     """ Defines the public API for interacting with the minibus """
-    def __init__(self, name, iface=None):
+    def __init__(self, name, cryptokey=None):
         """ Clients have a defined name """
         pass
 
