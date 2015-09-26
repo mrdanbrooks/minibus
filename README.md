@@ -52,10 +52,12 @@ This implementation is abstracted by the client interface.
 
 ## Python API
 
+There are currently two Python implementations of the MiniBusClientAPI - a threaded socket version and a Twisted version.
+
 ```
 class MiniBusClientAPI(object):
     """ Defines the public API for interacting with the minibus """
-    def __init__(self, name, iface=None):
+    def __init__(self, name, cryptokey=None):
 
     def publisher(self, topic_name, data_format):
 
@@ -105,5 +107,7 @@ The *header* is a JSON object consisting of the topic name as a string.
 The *data* field contains a string with the message as a serialized JSON object inside it. 
 
 ## Requires
-python-twisted
-python-jsonschema
+* ``python 2.7``
+* ``python-jsonschema``
+* ``python-twisted`` (optional: for Twisted client)
+* ``gnupg`` (optional: for encryption)
