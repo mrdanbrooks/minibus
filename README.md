@@ -1,4 +1,12 @@
-# minibus
+# MiniBus
+
+MiniBus is a interprocess communication library for rapid prototyping complex software using service-oriented architecture.  
+Similar functionality can be found in tools such as [ICE](www.zeroc.com/ice.html), [LCM](https://lcm-proj.github.io/), and [ROS](www.ros.org).
+MiniBus has been optimized to have a
+* highly flexible protocol 
+* simple client API
+* minimal dependencies
+* easy to embed in existing projects
 
 ## Overview
 Conceptually, a MiniBus network consists of a group of independent and loosely associated processes called *Clients* that can communicate with each other by passing messages (even between different machines). 
