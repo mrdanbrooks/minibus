@@ -6,6 +6,9 @@ with open("VERSION", "r") as f:
 with open("README.md", "r") as f:
     long_description = f.read()
 
+with open("requirements.txt", "r") as f:
+    requirements = f.read().splitlines()
+
 setup(name='minibus',
       version=version,
       description="MiniBus IPC Library",
@@ -27,7 +30,7 @@ setup(name='minibus',
       py_modules=['minibus'],
       scripts=['mbtt'],
 
-      install_requires=['jsonschema','netifaces'],
+      install_requires=requirements, #['jsonschema','netifaces'],
 
       # These can be installed optionally using
       # $ pip install -e .[twisted,crypto]
