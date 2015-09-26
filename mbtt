@@ -3,7 +3,7 @@
 mbtt - MiniBus Topic Tool
 """
 import argparse
-from minibus import MiniBusTwistedClient, MiniBusSocketClient
+from minibus import MiniBusSocketClient
 import uuid
 import json
 import jsonschema
@@ -75,71 +75,77 @@ class TopicTool(object):
             self.closedown()
 
 
+try:
+    from minibus import MiniBusTwistedClient
+    class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
+        def __init__(self, args):
+            MiniBusTwistedClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
+            TopicTool.__init__(self, args)
 
-class TwistedTopicTool(MiniBusTwistedClient, TopicTool):
-    def __init__(self, args):
-        MiniBusTwistedClient.__init__(self, name=args.name, cryptokey=args.cryptokey)
-        TopicTool.__init__(self, args)
+            # These functions don't have definitive ends to them because we don't know
+            # how many responses we will get. So just timeout after about a second.
+            if self.args.cmd in ["clients", "publishers", "subscribers", "services"]:
+                from twisted.internet import reactor
+                reactor.callLater(1, self.exit_)
 
-        # These functions don't have definitive ends to them because we don't know
-        # how many responses we will get. So just timeout after about a second.
-        if self.args.cmd in ["clients", "publishers", "subscribers", "services"]:
-            from twisted.internet import reactor
-            reactor.callLater(1, self.exit_)
+        @MiniBusTwistedClient.inlineServiceCallbacks
+        def clients_callback(self, idstr, data):
+            client_info = list()
+            client_info.append(data)
+            if self.args.hostnames:
+                get_hostname = self.service_func_client("/__minibus__/%s/__hostname__" % data, {"type": "null"}, {"type": "string"})
+                hostname = yield get_hostname(None)
 
-    @MiniBusTwistedClient.inlineServiceCallbacks
-    def clients_callback(self, idstr, data):
-        client_info = list()
-        client_info.append(data)
-        if self.args.hostnames:
-            get_hostname = self.service_func_client("/__minibus__/%s/__hostname__" % data, {"type": "null"}, {"type": "string"})
-            hostname = yield get_hostname(None)
+            if self.args.pids:
+                get_pid = self.service_func_client("/__minibus__/%s/__pid__" % data, 
+                                                   {"type": "null"}, 
+                                                   {"type": "integer"})
+                pid = yield get_pid(None)
 
-        if self.args.pids:
-            get_pid = self.service_func_client("/__minibus__/%s/__pid__" % data, 
-                                               {"type": "null"}, 
-                                               {"type": "integer"})
-            pid = yield get_pid(None)
+            if self.args.publishers:
+                get_publishers = self.service_func_client("/__minibus__/%s/__publishers__" % data, 
+                                                          {"type": "null"}, 
+                                                          {"type": "array"})
+                publishers = yield get_publishers(None)
 
-        if self.args.publishers:
-            get_publishers = self.service_func_client("/__minibus__/%s/__publishers__" % data, 
-                                                      {"type": "null"}, 
-                                                      {"type": "array"})
-            publishers = yield get_publishers(None)
+            if self.args.subscribers:
+                get_subscribers = self.service_func_client("/__minibus__/%s/__subscribers__" % data, 
+                                                          {"type": "null"}, 
+                                                          {"type": "array"})
+                subscribers = yield get_subscribers(None)
 
-        if self.args.subscribers:
-            get_subscribers = self.service_func_client("/__minibus__/%s/__subscribers__" % data, 
-                                                      {"type": "null"}, 
-                                                      {"type": "array"})
-            subscribers = yield get_subscribers(None)
+            if self.args.services:
+                get_services = self.service_func_client("/__minibus__/%s/__service_servers__" % data, 
+                                                          {"type": "null"}, 
+                                                          {"type": "array"})
+                services = yield get_services(None)
 
-        if self.args.services:
-            get_services = self.service_func_client("/__minibus__/%s/__service_servers__" % data, 
-                                                      {"type": "null"}, 
-                                                      {"type": "array"})
-            services = yield get_services(None)
+            print client_info[0]+":"
+            if self.args.pids:
+                print "  PID: %d" % pid
+            if self.args.hostnames:
+                print "  HOSTNAME: %s" % hostname
+            if self.args.publishers:
+                print "  PUBLISHES:"
+                for p in publishers:
+                    print "\t%s" % p
+            if self.args.subscribers:
+                print "  SUBSCRIBES:"
+                for s in subscribers:
+                    print "\t%s" % s
+            if self.args.services:
+                print "  SERVICES:"
+                for s in services:
+                    print "\t%s" % s
+            print ""
 
-        print client_info[0]+":"
-        if self.args.pids:
-            print "  PID: %d" % pid
-        if self.args.hostnames:
-            print "  HOSTNAME: %s" % hostname
-        if self.args.publishers:
-            print "  PUBLISHES:"
-            for p in publishers:
-                print "\t%s" % p
-        if self.args.subscribers:
-            print "  SUBSCRIBES:"
-            for s in subscribers:
-                print "\t%s" % s
-        if self.args.services:
-            print "  SERVICES:"
-            for s in services:
-                print "\t%s" % s
-        print ""
-
-    def closedown(self):
-        self.exit_()
+        def closedown(self):
+            self.exit_()
+except Exception:
+    class TwistedTopicTool(object):
+        def __init__(self, args):
+            print "Unable to load Twisted Libraries. Are they installed?"
+            exit(1)
 
 
 class SocketTopicTool(MiniBusSocketClient, TopicTool):
