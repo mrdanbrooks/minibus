@@ -24,8 +24,8 @@ setup(name='minibus',
       ],
       keywords='minibus, publish/subscribe, ipc, development',
 
-#       packages=['minibus'],
       py_modules=['minibus'],
+      scripts=['mbtt'],
 
       install_requires=['jsonschema','netifaces'],
 
@@ -34,9 +34,8 @@ setup(name='minibus',
       extras_require={
           'twisted': ['Twisted'],
           'crypto': ['gnupg'],
-      },
+      }
 
-      scripts=['mbtt']
       )
 
 
