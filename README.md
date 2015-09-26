@@ -116,8 +116,12 @@ The bus schema defines a *packet* to contain a *header* object and a *data* fiel
 The *header* is a JSON object consisting of the topic name as a string.
 The *data* field contains a string with the message as a serialized JSON object inside it. 
 
-## Requires
+## Dependencies
+These python dependencies are all available in pip, apt, and macports repositories (although they may be under different names)
+
 * ``python 2.7``
-* ``python-jsonschema``
-* ``python-twisted`` (optional: for Twisted client)
+* ``jsonschema``
+* ``netifaces``
+* ``Twisted`` (optional: for Twisted client)
 * ``gnupg`` (optional: for encryption)
+
