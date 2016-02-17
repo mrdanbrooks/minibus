@@ -8,7 +8,7 @@ develop:
 
 .PHONY: test
 test:
-	cd test; ./test_lint_examples.sh    
+	pylint -E examples/*
 #	python -m unittest discover . --pattern '*test.py'
 
 .PHONY: coverage
