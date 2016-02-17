@@ -5,5 +5,4 @@ install:
     - "pip install -r requirements.txt"
     - pip install pylint
     - pip install .
-    - apt-get install gnupg
 script: make test
