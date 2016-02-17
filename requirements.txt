@@ -1,3 +1,4 @@
 jsonschema >=2.5.1
 netifaces >=0.8
 Twisted >=7.1.2
+python-gnupg
