@@ -1,5 +1,7 @@
 # MiniBus
 
+![travisci](https://travis-ci.org/mrdanbrooks/minibus.svg)
+
 MiniBus is an interprocess communication library for rapid prototyping complex software built using a service-oriented architecture design.  
 Similar functionality can be found in tools such as [ICE](www.zeroc.com/ice.html), [LCM](https://lcm-proj.github.io/), and [ROS](www.ros.org).
 MiniBus has been optimized to have a
