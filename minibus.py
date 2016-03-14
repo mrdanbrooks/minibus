@@ -19,7 +19,13 @@
 import logging
 import logging.handlers
 import re
-import json
+import ujson as json
+try:
+    # Much faster then built-in json
+    # http://artem.krylysov.com/blog/2015/09/29/benchmark-python-json-libraries/
+    import ujson as json
+except ImportError:
+    import json
 import jsonschema
 import os
 import random
@@ -228,6 +234,7 @@ class MiniBusClientCore(MiniBusClientAPI, MiniBusClientCoreServices):
         # Set up Logging Mechanism
         self._logger = MBLagerLogger("MiniBus")
         self._logger.console(INFO)
+        self._logger.debug("Using module '%s' for messages" % json.__name__)
 
         MiniBusClientAPI.__init__(self, name, iface)
         self._iface = iface
