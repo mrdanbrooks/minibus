@@ -12,6 +12,12 @@ MiniBus has been optimized to have a
 
 Minibus is currently only available in Python, however its simple design should allow it to be easily ported into other languages.
 
+## Install
+
+``` 
+$ sudo pip install minibus
+```
+
 ## Overview
 Conceptually, a MiniBus network consists of a group of independent and loosely associated processes called *Clients* that can communicate with each other by passing messages (even between different machines). 
 Such messages are broadcast over named channels called *Topics*.

@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 """
 mbtt - MiniBus Topic Tool
+
+TODO:
+    - Keeping up with the dual socket/twisted implementation here is unsustainable.
+      We should move half the functionality (which? twisted or sockets?) to the 
+      examples code area for use in debugging (since it is useful).
+    - add a timeout option when waiting for replies from nodes
+    - improve the output interface
+    - add ability to make test service calls
 """
 import argparse
 from minibus import MiniBusSocketClient
