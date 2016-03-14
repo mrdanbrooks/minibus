@@ -27,6 +27,11 @@ try:
 except ImportError:
     import json
 import jsonschema
+# TODO: We spend ALOT of time validating messages. This can be improved.
+# We should allow publishers, subscribers, and services to optionally NOT TEST
+# every message sent/received. However, before implementing this we should 
+# establish some kind of a "distributed master" that tracks who is doing what
+# using our hidden topic names, and check that topic schemas at least line up.
 import os
 import random
 import uuid
