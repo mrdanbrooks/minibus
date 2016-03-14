@@ -1,0 +1,11 @@
+USING VIRTUAL ENVIRONMENTS
+$ sudo pip install virtualenv
+$ cd /tmp
+$ virtualenv venv
+$ source /tmp/venv/bin/activate
+$ cd ~/minibus_src_dir
+$ pip install .
+
+USING PIP 'EDITABLE' MODE
+$ cd ~/minibus_src_dir
+$ sudo pip install -e .
